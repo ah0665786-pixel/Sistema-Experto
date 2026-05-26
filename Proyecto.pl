@@ -2,15 +2,17 @@
 % HECHOS DINAMICOS
 % ====================================
 
-% Aqui se almacenan las respuestas del usuario
+% Guarda respuestas del usuario
 :- dynamic respuesta/2.
 
+% Guarda historial
+:- dynamic historial/3.
+
 
 % ====================================
-% REGLAS PRINCIPALES DEL SISTEMA
+% REGLAS PRINCIPALES
 % ====================================
 
-% Regla para iniciar el sistema
 inicio :-
     limpiar,
     menu.
@@ -25,8 +27,8 @@ menu :-
     write('===================================='), nl,
     write(' ASISTENTE DE CUMPLIMIENTO RGPD '), nl,
     write('===================================='), nl,
-    write('1. Evaluar empresa'), nl,
-    write('2. Ver informacion'), nl,
+    write('1. Evaluar empresa o sitio web'), nl,
+    write('2. Ver historial'), nl,
     write('3. Salir'), nl,
     write('Seleccione una opcion: '),
     read(Opcion),
@@ -34,14 +36,14 @@ menu :-
 
 
 % ====================================
-% REGLAS DE OPCIONES DEL MENU
+% OPCIONES DEL MENU
 % ====================================
 
 opcion(1) :-
     evaluar.
 
 opcion(2) :-
-    informacion.
+    ver_historial.
 
 opcion(3) :-
     write('Saliendo del sistema...'), nl.
@@ -52,20 +54,7 @@ opcion(_) :-
 
 
 % ====================================
-% INFORMACION DEL SISTEMA
-% ====================================
-
-informacion :-
-    nl,
-    write('Este sistema evalua si una empresa'), nl,
-    write('cumple con normas basicas de'), nl,
-    write('proteccion de datos personales.'), nl,
-    nl,
-    menu.
-
-
-% ====================================
-% LIMPIAR HECHOS GUARDADOS
+% LIMPIAR RESPUESTAS
 % ====================================
 
 limpiar :-
@@ -73,25 +62,45 @@ limpiar :-
 
 
 % ====================================
-% REGLA PARA HACER PREGUNTAS
+% HACER PREGUNTAS
 % ====================================
 
 preguntar(Pregunta) :-
+    repeat,
+
     write(Pregunta),
     write(' (si/no): '),
+
     read(Respuesta),
     nl,
 
-    % Aqui se crean los HECHOS
-    assert(respuesta(Pregunta, Respuesta)).
+    (
+        Respuesta = si ->
+        assert(respuesta(Pregunta, si)), !
+
+    ;
+
+        Respuesta = no ->
+        assert(respuesta(Pregunta, no)), !
+
+    ;
+
+        write('Respuesta invalida. Escriba si. o no.'), nl,
+        fail
+    ).
 
 
 % ====================================
-% REGLA DE EVALUACION
+% EVALUAR EMPRESA
 % ====================================
 
 evaluar :-
+
     limpiar,
+
+    nl,
+    write('Ingrese el nombre de la empresa o sitio web: '),
+    read(Empresa),
 
     preguntar('La empresa solicita consentimiento para usar datos'),
     preguntar('El sitio tiene aviso de privacidad'),
@@ -99,11 +108,127 @@ evaluar :-
     preguntar('La empresa protege datos con contrasenas o cifrado'),
     preguntar('El sitio informa sobre uso de cookies'),
 
-    diagnostico.
+    diagnostico(Empresa).
+
+
+% ====================================
+% REGLAS DE DIAGNOSTICO
+% ====================================
+
+% Cumple completamente
+
+diagnostico(Empresa) :-
+
+    respuesta('La empresa solicita consentimiento para usar datos', si),
+    respuesta('El sitio tiene aviso de privacidad', si),
+    respuesta('Los usuarios pueden eliminar sus datos', si),
+    respuesta('La empresa protege datos con contrasenas o cifrado', si),
+    respuesta('El sitio informa sobre uso de cookies', si),
+
+    assert(
+        historial(
+            Empresa,
+            'Cumple con RGPD',
+            'No necesita recomendaciones'
+        )
+    ),
+
+    nl,
+    write('===================================='), nl,
+    write('RESULTADO: CUMPLE CON RGPD'), nl,
+    write('La empresa cumple con los requisitos basicos.'), nl,
+    write('===================================='), nl,
+
+    menu.
+
+
+% No cumple
+
+diagnostico(Empresa) :-
+
+    respuesta('La empresa solicita consentimiento para usar datos', no),
+
+    Recomendacion =
+    'Debe solicitar consentimiento para el uso de datos personales',
+
+    assert(
+        historial(
+            Empresa,
+            'No cumple con RGPD',
+            Recomendacion
+        )
+    ),
+
+    nl,
+    write('===================================='), nl,
+    write('RESULTADO: NO CUMPLE'), nl,
+    write('Falta consentimiento del usuario.'), nl,
+    write('===================================='), nl,
+
+    recomendaciones,
+
+    menu.
+
+
+% Cumplimiento parcial
+
+diagnostico(Empresa) :-
+
+    generar_recomendaciones(Lista),
+
+    assert(
+        historial(
+            Empresa,
+            'Cumplimiento parcial',
+            Lista
+        )
+    ),
+
+    nl,
+    write('===================================='), nl,
+    write('RESULTADO: CUMPLIMIENTO PARCIAL'), nl,
+    write('La empresa necesita mejorar algunas areas.'), nl,
+    write('===================================='), nl,
+
+    recomendaciones,
+
+    menu.
+
+
+% ====================================
+% GENERAR RECOMENDACIONES
+% ====================================
+
+generar_recomendaciones(Lista) :-
+
+    findall(
+        Recomendacion,
+
+        recomendacion(Recomendacion),
+
+        Lista
+    ).
 
 
 % ====================================
 % REGLAS DE RECOMENDACIONES
+% ====================================
+
+recomendacion('Agregar aviso de privacidad') :-
+    respuesta('El sitio tiene aviso de privacidad', no).
+
+recomendacion('Permitir eliminacion de datos') :-
+    respuesta('Los usuarios pueden eliminar sus datos', no).
+
+recomendacion('Implementar medidas de seguridad') :-
+    respuesta('La empresa protege datos con contrasenas o cifrado', no).
+
+recomendacion('Mostrar aviso de cookies') :-
+    respuesta('El sitio informa sobre uso de cookies', no).
+
+
+% ====================================
+% MOSTRAR RECOMENDACIONES
 % ====================================
 
 recomendaciones :-
@@ -112,80 +237,54 @@ recomendaciones :-
     write('RECOMENDACIONES:'), nl,
 
     (
-        respuesta('El sitio tiene aviso de privacidad', no)
-        ->
-        write('- Agregar aviso de privacidad'), nl
-        ;
-        true
-    ),
+        recomendacion(R),
 
-    (
-        respuesta('Los usuarios pueden eliminar sus datos', no)
-        ->
-        write('- Permitir eliminacion de datos'), nl
-        ;
-        true
-    ),
+        write('- '),
+        write(R),
+        nl,
 
-    (
-        respuesta('La empresa protege datos con contrasenas o cifrado', no)
-        ->
-        write('- Implementar medidas de seguridad'), nl
-        ;
-        true
-    ),
+        fail
+    ;
 
-    (
-        respuesta('El sitio informa sobre uso de cookies', no)
-        ->
-        write('- Mostrar aviso de cookies'), nl
-        ;
         true
     ).
 
 
 % ====================================
-% REGLAS DEL SISTEMA EXPERTO
+% VER HISTORIAL
 % ====================================
 
-% Regla: Cumple completamente con RGPD
-diagnostico :-
-
-    respuesta('La empresa solicita consentimiento para usar datos', si),
-    respuesta('El sitio tiene aviso de privacidad', si),
-    respuesta('Los usuarios pueden eliminar sus datos', si),
-    respuesta('La empresa protege datos con contrasenas o cifrado', si),
-    respuesta('El sitio informa sobre uso de cookies', si),
+ver_historial :-
 
     nl,
     write('===================================='), nl,
-    write('RESULTADO: CUMPLE CON RGPD'), nl,
-    write('La empresa cumple con los requisitos basicos.'), nl,
+    write(' HISTORIAL DE EVALUACIONES '), nl,
     write('===================================='), nl,
-    menu.
 
+    (
+        historial(Empresa, Resultado, Recomendaciones),
 
-% Regla: No cumple con RGPD
-diagnostico :-
+        write('Empresa/Sitio: '),
+        write(Empresa),
+        nl,
 
-    respuesta('La empresa solicita consentimiento para usar datos', no),
+        write('Resultado: '),
+        write(Resultado),
+        nl,
 
-    nl,
-    write('===================================='), nl,
-    write('RESULTADO: NO CUMPLE'), nl,
-    write('Falta consentimiento del usuario.'), nl,
-    write('===================================='), nl,
-    recomendaciones,
-    menu.
+        write('Recomendaciones: '),
+        nl,
 
+        write(Recomendaciones),
+        nl,
 
-% Regla: Cumplimiento parcial
-diagnostico :-
+        write('------------------------------------'),
+        nl,
 
-    nl,
-    write('===================================='), nl,
-    write('RESULTADO: CUMPLIMIENTO PARCIAL'), nl,
-    write('La empresa necesita mejorar algunas areas.'), nl,
-    write('===================================='), nl,
-    recomendaciones,
+        fail
+    ;
+
+        true
+    ),
+
     menu.
